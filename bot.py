@@ -1,4 +1,6 @@
 from os import getenv
+from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderTimedOut
 
 from telegram.ext import (
     Updater,
@@ -14,10 +16,23 @@ from telegram import (
 )
 
 
+def latlon_to_address(latitude, longitude):
+    geolocator = Nominatim(user_agent='tg-tgtg')
+
+    for _ in range(1):  # maximum 3 attempts
+        try:
+            location = geolocator.reverse(f'{latitude}, {longitude}',
+                                          addressdetails=False, zoom=16)
+            return ', '.join(location.address.split(', ')[:2])
+        except GeocoderTimedOut:
+            print('timeout')
+            pass
+
+    return None
+
+
 def start(update, context):
-    location = context.user_data.get('location', None)
-    location = (f'{location["latitude"]:.1f}, {location["longitude"]:.1f}'
-                if location else 'Unknown')
+    location = context.user_data.get('address', 'Unknown')
 
     keyboard = ReplyKeyboardMarkup(
         [[KeyboardButton('Option A1'), KeyboardButton('Option A2')],
@@ -35,8 +50,13 @@ def test(update, context):
 
 
 def update_location(update, context):
-    context.user_data['location'] = update.message.location
-    update.message.reply_text('User location updated.',
+    latlon = (update.message.location['latitude'],
+              update.message.location['longitude'])
+    context.user_data['latlon'] = latlon
+    context.user_data['address'] = latlon_to_address(*latlon)
+
+    update.message.reply_text(f'User location updated: '
+                              f'{context.user_data["address"]}',
                               reply_markup=ReplyKeyboardRemove())
 
 
